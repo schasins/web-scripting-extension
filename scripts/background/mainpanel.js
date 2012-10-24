@@ -1124,6 +1124,8 @@ var handleMessage = function(port, request) {
     ports.addSnapshot(port.name, request.value);
   } else if (request.type == "ack") {
     ports.setAck(request.value);
+  } else if (request.type == "newCompensationEvent") {
+    ports.sendToAll(request);
   }
 };
 

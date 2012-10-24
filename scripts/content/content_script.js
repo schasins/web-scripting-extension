@@ -121,6 +121,7 @@ function processEvent(eventData) {
     for (var i in annotationEvents) {
       var annotation = annotationEvents[i];
       if (annotation.record && annotation.guard(eventData, eventMessage)) {
+        console.log("annotation guard applies at record ", i);
         annotation.record(eventData, eventMessage);
       }
     }
@@ -157,6 +158,8 @@ function handleMessage(request) {
     }
   } else if (request.type == "snapshot") {
     port.postMessage({type: "snapshot", value: snapshotDom(document)});
+  } else if (request.type == "newCompensationEvent") {
+    insertCompensationEvent(request.value);
   }
 }
 
@@ -202,7 +205,10 @@ function simulate(element, eventData) {
   for (var i in annotationEvents) {
     var annotation = annotationEvents[i];
     if (annotation.replay && annotation.guard(element, eventData)) {
+      console.log("annotation guard applies at replay ", i);
+      console.log("element before", element);
       annotation.replay(element, eventData);
+      console.log("element after", element);
     }
   }
 
@@ -324,7 +330,7 @@ function generateMismatchedValueCompensationEvent(element, eventData, delta, thi
   if (thisDeltaShouldHappen){
     console.log("about to find props");
     var propsToChange = divergingProps(delta.record,delta.replay);
-    propsToChange = _.without(propsToChange,"innerHTML", "outerHTML", "innerText", "outerText");
+    propsToChange = _.without(propsToChange,"innerHTML", "outerHTML", "innerText", "outerText", "textContent");
     console.log("propsToChange ", propsToChange);
     
     var replayFunctions = [];
@@ -368,7 +374,7 @@ function generateMismatchedValueCompensationEvent(element, eventData, delta, thi
     //now we know what statement we want to do at replay to correct each
     //diverging prop
     console.log("-----------");
-    console.log("name");
+    console.log("name", eventData.type+"_"+eventData.nodeName);
     console.log(replayFunctions);
     console.log(recordFunctions);
     console.log("annotation events before ", annotationEvents);
@@ -541,7 +547,10 @@ function makeConcatFunction(targetProp, concatList){
 function makeMirrorFunction(targetProp){
   var mirrorFunction = function(element, eventMessage){
     if ((typeof element[targetProp]) !== "undefined"){
+      console.log("the type isn't undefined, and we're going to update something");
+      console.log(element[targetProp]);
       element[targetProp] = eventMessage[targetProp+"_value"];
+      console.log(element[targetProp]);
     }
   }
   return mirrorFunction;
@@ -550,7 +559,9 @@ function makeMirrorFunction(targetProp){
 function makeMirrorRecordFunction(targetProp){
   var mirrorRecordFunction = function(element, eventMessage){
     if ((typeof element[targetProp]) !== "undefined"){
+      console.log("let's record ", element[targetProp], " into ", targetProp+_value);
       eventMessage[targetProp+"_value"] = element[targetProp];
+      console.log(eventMessage[targetProp+"_value"]);
     }
   }
   return mirrorRecordFunction;
@@ -570,6 +581,8 @@ function addCompensationEvent(typeOfEvent,typeOfNode,replayFunctions,recordFunct
   var replay = function(element, eventMessage) {
                   //iterate through the statements we want to execute
                   for(var i=0;i<replayFunctions.length;i++){
+                    console.log("in replay function");
+                    console.log(replayFunctions[i]);
                     replayFunctions[i](element, eventMessage);
                   }
                 };
@@ -587,8 +600,20 @@ function addCompensationEvent(typeOfEvent,typeOfNode,replayFunctions,recordFunct
                     }
                   }
   }
-  annotationEvents[name] = {"guard":guard,"record":record,"replay":replay};
+  var eventObj = {"guard":guard.toString(),"record":record.toString(),"replay":replay.toString(), "name":name};
+  console.log("eventObj", eventObj);
+  port.postMessage({type: "newCompensationEvent", value: eventObj});
+  insertCompensationEvent(eventObj);
 };
+
+function insertCompensationEvent(eventObj){
+  console.log("trying to add a compensation event", eventObj);
+  console.log(eventObj.guard);
+  var guard = eval (eventObj.guard);
+  var record = eval (eventObj.record);
+  var replay = eval (eventObj.replay);
+  annotationEvents[eventObj.name]={"guard":guard,"record":record,"replay":replay};
+}
 
 //function for sending an alert that the user will see
 function sendAlert(msg){
